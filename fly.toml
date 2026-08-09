@@ -1,0 +1,41 @@
+# Fly.io app config. Adjust `app` and `primary_region` for your account
+# (or run `fly launch --no-deploy` and let it fill these in from this file).
+#
+# IMPORTANT: min_machines_running = 1 and auto_stop_machines = false are
+# deliberate — Stidy's signal/bot engines run on in-process intervals, not
+# request-triggered cron. A machine that sleeps stops protecting open
+# positions (paper or live) until the next request wakes it. Do not change
+# this to a scale-to-zero config while any bot — especially a live one — has
+# open positions.
+
+app = "stidy"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PORT = "8787"
+  DATABASE_PATH = "/data/stidy.db"
+  NODE_ENV = "production"
+
+[[mounts]]
+  source = "stidy_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "15s"
+    method = "GET"
+    timeout = "5s"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
