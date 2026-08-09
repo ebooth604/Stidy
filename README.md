@@ -200,6 +200,46 @@ you're likely to change:
 | `BASIS_GAP_ALERT_PCT`, `FUNDING_APR_ALERT_PCT`, `WHALE_TRADE_USD` | Signal-firing thresholds |
 | `HYPERLIQUID_LIVE_TRADING_ENABLED` + key + address | Enables real-money trading — see [Live trading](#live-trading-real-money) |
 
+## Deploying it (Fly.io)
+
+Stidy is one long-running Node process (the signal engine polls Hyperliquid on
+an interval and holds a live WebSocket open; the bot engine ticks on a
+timer) with a SQLite file that needs to survive restarts. That combination
+rules out most "serverless"/scale-to-zero hosts — Fly.io's persistent
+**Volumes** are built for exactly this pattern, which is why it's the
+recommended target. (Render's paid tier or a plain VPS work too; Render's
+*free* tier specifically does not — no persistent disk, so the DB resets
+every time the instance sleeps.)
+
+The repo ships a single-image `Dockerfile` (builds the dashboard and the API
+into one deployable service — the Express server serves the built React app
+as static files and answers `/api/*` itself, so there's no separate
+frontend deploy or CORS setup to manage) and a `fly.toml`.
+
+```bash
+# One-time setup
+fly auth login
+fly launch --no-deploy          # creates the app from fly.toml; pick a unique name when prompted
+fly volumes create stidy_data --size 1 --region <region-you-picked>
+
+# Secrets (only set the ones you're enabling — see Environment variables above)
+fly secrets set ANTHROPIC_API_KEY=... CMC_API_KEY=...
+# Live trading secrets, if you're using it (see Live trading above first):
+fly secrets set HYPERLIQUID_LIVE_TRADING_ENABLED=true \
+  HYPERLIQUID_API_WALLET_PRIVATE_KEY=... \
+  HYPERLIQUID_ACCOUNT_ADDRESS=... \
+  HYPERLIQUID_LIVE_MAX_ORDER_USD=100
+
+fly deploy
+```
+
+`fly.toml` deliberately sets `min_machines_running = 1` and
+`auto_stop_machines = false` — **do not change this to a scale-to-zero
+config.** Stidy's bot loop isn't request-triggered; a sleeping machine stops
+checking stop-loss/take-profit on open positions (paper or live) until the
+next request wakes it. For live trading especially, that's not a cosmetic
+tradeoff.
+
 ### Tests
 
 ```bash
