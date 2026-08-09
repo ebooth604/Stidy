@@ -3,10 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { BotForm, type BotFormValues } from "../components/BotForm";
 import { EmptyState } from "../components/EmptyState";
+import { LiveBadge } from "../components/LiveBadge";
 import { usePolling } from "../hooks/usePolling";
 
 export function Bots() {
   const { data: bots, refresh } = usePolling(api.bots.list, 15_000);
+  const health = usePolling(api.health, 30_000);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -42,7 +44,12 @@ export function Bots() {
       {showForm && (
         <div className="rounded-lg border border-border bg-panel p-5">
           {formError && <div className="mb-3 text-sm text-short">{formError}</div>}
-          <BotForm submitLabel="Create bot" onSubmit={handleCreate} submitting={submitting} />
+          <BotForm
+            submitLabel="Create bot"
+            onSubmit={handleCreate}
+            submitting={submitting}
+            liveTradingConfigured={health.data?.liveTradingConfigured ?? false}
+          />
         </div>
       )}
 
@@ -67,6 +74,11 @@ export function Bots() {
                     <Link to={`/bots/${b.id}`} className="font-medium text-accent hover:underline">
                       {b.name}
                     </Link>
+                    {b.config.liveTrading && (
+                      <span className="ml-2 align-middle">
+                        <LiveBadge />
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-slate-400">{b.strategy.replace(/_/g, " ")}</td>
                   <td className="px-3 py-2">

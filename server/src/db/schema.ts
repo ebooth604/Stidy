@@ -82,6 +82,48 @@ export const paperTradesTable = sqliteTable("paper_trades", {
     .default(sql`(unixepoch())`),
 });
 
+/** Real-money positions, kept fully separate from paper_positions so a live
+ * trade can never be mistaken for simulated data (or vice versa) by the AI
+ * tuner, the digest, or any stats query.
+ */
+export const livePositionsTable = sqliteTable("live_positions", {
+  id: text("id").primaryKey(),
+  botId: text("bot_id").notNull(),
+  coin: text("coin").notNull(),
+  side: text("side").notNull(), // "long" | "short"
+  quantity: real("quantity").notNull(),
+  entryPrice: real("entry_price").notNull(), // actual fill price, not the reference price
+  stopLoss: real("stop_loss").notNull(),
+  takeProfit: real("take_profit").notNull(),
+  signalId: text("signal_id"),
+  status: text("status").notNull().default("open"), // "open" | "closed" | "stopped"
+  pnl: real("pnl"),
+  pnlPct: real("pnl_pct"),
+  closedPrice: real("closed_price"),
+  openedAt: integer("opened_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  closedAt: integer("closed_at", { mode: "timestamp" }),
+});
+
+export const liveTradesTable = sqliteTable("live_trades", {
+  id: text("id").primaryKey(),
+  botId: text("bot_id").notNull(),
+  positionId: text("position_id").notNull(),
+  coin: text("coin").notNull(),
+  side: text("side").notNull(),
+  quantity: real("quantity").notNull(),
+  entryPrice: real("entry_price").notNull(),
+  exitPrice: real("exit_price").notNull(),
+  closeReason: text("close_reason").notNull(), // "stop_loss" | "take_profit" | "manual"
+  pnl: real("pnl").notNull(),
+  pnlPct: real("pnl_pct").notNull(),
+  openedAt: integer("opened_at", { mode: "timestamp" }).notNull(),
+  closedAt: integer("closed_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
 /** Cached AI output: digests, tuning suggestions, bot designs. */
 export const aiReportsTable = sqliteTable("ai_reports", {
   id: text("id").primaryKey(),

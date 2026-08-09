@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import { BotForm, type BotFormValues } from "../components/BotForm";
 import { EmptyState } from "../components/EmptyState";
+import { LiveBadge } from "../components/LiveBadge";
 import { PositionTable } from "../components/PositionTable";
 import { TradeTable } from "../components/TradeTable";
 import { usePolling } from "../hooks/usePolling";
@@ -12,6 +13,7 @@ export function BotDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: bot, refresh } = usePolling(() => api.bots.get(id!), 10_000, [id]);
+  const health = usePolling(api.health, 30_000);
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -57,6 +59,12 @@ export function BotDetail() {
     refresh();
   }
 
+  async function handleCloseLivePosition(positionId: string) {
+    if (!confirm("Close this LIVE position with a real market order?")) return;
+    await api.live.closePosition(positionId);
+    refresh();
+  }
+
   async function handleTune() {
     setTuningLoading(true);
     setTuningError(null);
@@ -81,7 +89,10 @@ export function BotDetail() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">{bot.name}</h1>
+          <h1 className="flex items-center gap-2 text-xl font-semibold">
+            {bot.name}
+            {bot.config.liveTrading && <LiveBadge />}
+          </h1>
           <div className="text-sm text-slate-500">{bot.strategy.replace(/_/g, " ")}</div>
         </div>
         <div className="flex gap-2">
@@ -106,16 +117,26 @@ export function BotDetail() {
             submitLabel="Save changes"
             onSubmit={handleSave}
             submitting={saving}
+            liveTradingConfigured={health.data?.liveTradingConfigured ?? false}
           />
         </div>
       )}
 
       <div className="grid grid-cols-4 gap-4">
-        <Stat label="Open positions" value={`${bot.openPositions}/${bot.config.maxPositions}`} />
-        <Stat label="Total trades" value={String(bot.totalTrades)} />
-        <Stat label="Win rate" value={bot.winRate !== null ? `${bot.winRate}%` : "—"} />
-        <Stat label="Total P&L" value={`${bot.totalPnl >= 0 ? "+" : ""}$${bot.totalPnl.toFixed(2)}`} tone={bot.totalPnl >= 0 ? "positive" : "negative"} />
+        <Stat label="Open positions (paper)" value={`${bot.openPositions}/${bot.config.maxPositions}`} />
+        <Stat label="Total trades (paper)" value={String(bot.totalTrades)} />
+        <Stat label="Win rate (paper)" value={bot.winRate !== null ? `${bot.winRate}%` : "—"} />
+        <Stat label="Total P&L (paper)" value={`${bot.totalPnl >= 0 ? "+" : ""}$${bot.totalPnl.toFixed(2)}`} tone={bot.totalPnl >= 0 ? "positive" : "negative"} />
       </div>
+
+      {(bot.config.liveTrading || bot.totalLiveTrades > 0 || bot.openLivePositions > 0) && (
+        <div className="grid grid-cols-4 gap-4 rounded-lg border border-short/30 bg-short/5 p-3">
+          <Stat label="Open positions (LIVE)" value={`${bot.openLivePositions}/${bot.config.maxPositions}`} />
+          <Stat label="Total trades (LIVE)" value={String(bot.totalLiveTrades)} />
+          <Stat label="Total P&L (LIVE)" value={`${bot.totalLivePnl >= 0 ? "+" : ""}$${bot.totalLivePnl.toFixed(2)}`} tone={bot.totalLivePnl >= 0 ? "positive" : "negative"} />
+          <div className="flex items-center text-xs text-slate-500">Real money — separate from the paper stats above.</div>
+        </div>
+      )}
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
@@ -143,14 +164,32 @@ export function BotDetail() {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold text-slate-300">Open positions</h2>
+        <h2 className="text-sm font-semibold text-slate-300">Open positions (paper)</h2>
         <PositionTable positions={bot.openPositions} onClose={handleClosePosition} />
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold text-slate-300">Recent trades</h2>
+        <h2 className="text-sm font-semibold text-slate-300">Recent trades (paper)</h2>
         <TradeTable trades={bot.recentTrades} />
       </section>
+
+      {(bot.openLivePositions > 0 || bot.totalLiveTrades > 0) && (
+        <>
+          <section className="flex flex-col gap-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+              Open positions <LiveBadge />
+            </h2>
+            <PositionTable positions={bot.openLivePositions} onClose={handleCloseLivePosition} />
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-300">
+              Recent trades <LiveBadge />
+            </h2>
+            <TradeTable trades={bot.recentLiveTrades} />
+          </section>
+        </>
+      )}
     </div>
   );
 }

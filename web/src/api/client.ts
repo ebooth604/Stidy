@@ -2,6 +2,8 @@ import type {
   BotDesign,
   BotSummary,
   ChatTurn,
+  HealthResponse,
+  LiveAccountState,
   PortfolioResponse,
   Position,
   SignalsResponse,
@@ -36,13 +38,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => request<{ status: string; aiConfigured: boolean }>("/health"),
+  health: () => request<HealthResponse>("/health"),
 
   signals: () => request<SignalsResponse>("/signals"),
 
   bots: {
     list: () => request<BotSummary[]>("/bots"),
-    get: (id: string) => request<BotSummary & { openPositions: Position[]; recentTrades: Trade[] }>(`/bots/${id}`),
+    get: (id: string) =>
+      request<
+        BotSummary & {
+          openPositions: Position[];
+          recentTrades: Trade[];
+          openLivePositions: Position[];
+          recentLiveTrades: Trade[];
+        }
+      >(`/bots/${id}`),
     create: (body: {
       name: string;
       strategy: string;
@@ -61,6 +71,13 @@ export const api = {
 
   portfolio: () => request<PortfolioResponse>("/portfolio"),
   trades: (limit = 50) => request<Trade[]>(`/trades?limit=${limit}`),
+
+  live: {
+    account: () => request<LiveAccountState>("/live/account"),
+    positions: () => request<Position[]>("/live/positions"),
+    trades: (limit = 50) => request<Trade[]>(`/live/trades?limit=${limit}`),
+    closePosition: (id: string) => request<{ closed: boolean }>(`/live-positions/${id}/close`, { method: "POST" }),
+  },
 
   ai: {
     digest: () => request<StoredDigest>("/ai/digest"),

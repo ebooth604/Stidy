@@ -5,11 +5,29 @@ import { z } from "zod";
 import { BotConfigSchema } from "../ai/schemas.js";
 import type { BotEngine } from "../bots/engine.js";
 import { getBotSummaries } from "../bots/summary.js";
-import { DEFAULT_BOT_CONFIG, STRATEGY_NAMES } from "../bots/types.js";
+import { DEFAULT_BOT_CONFIG, STRATEGY_NAMES, type BotConfig } from "../bots/types.js";
 import type { AppDb } from "../db/client.js";
-import { botsTable, paperPositionsTable, paperTradesTable } from "../db/schema.js";
+import { botsTable, livePositionsTable, liveTradesTable, paperPositionsTable, paperTradesTable } from "../db/schema.js";
+import { isLiveTradingConfigured } from "../hyperliquid/liveExchange.js";
+import { config } from "../lib/config.js";
 
 const StrategyEnum = z.enum(STRATEGY_NAMES as [string, ...string[]]);
+
+/** Applies to both create and update: a bot can only be flagged for live
+ * trading if the server actually has live trading configured, and its
+ * position size must fit under the hard per-order cap. Returns an error
+ * message, or null if the config is safe to save.
+ */
+function validateLiveTradingConfig(botConfig: BotConfig): string | null {
+  if (!botConfig.liveTrading) return null;
+  if (!isLiveTradingConfigured()) {
+    return "Live trading is not configured on this server (HYPERLIQUID_LIVE_TRADING_ENABLED / API wallet key / account address) — cannot enable it on a bot.";
+  }
+  if (botConfig.positionSizeUsd > config.liveTrading.maxOrderUsd) {
+    return `positionSizeUsd ($${botConfig.positionSizeUsd}) exceeds the live-trading cap of $${config.liveTrading.maxOrderUsd} (HYPERLIQUID_LIVE_MAX_ORDER_USD) — lower it before enabling live trading.`;
+  }
+  return null;
+}
 
 const CreateBotSchema = z.object({
   name: z.string().min(1).max(100),
@@ -39,7 +57,15 @@ export function createBotsRouter(db: AppDb, botEngine: BotEngine): IRouter {
       res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
-    const { name, strategy, config, pollIntervalSeconds, enabled } = parsed.data;
+    const { name, strategy, config: partialConfig, pollIntervalSeconds, enabled } = parsed.data;
+    const mergedConfig: BotConfig = { ...DEFAULT_BOT_CONFIG, ...partialConfig };
+
+    const liveError = validateLiveTradingConfig(mergedConfig);
+    if (liveError) {
+      res.status(400).json({ error: liveError });
+      return;
+    }
+
     const id = randomUUID();
     const now = new Date();
 
@@ -49,7 +75,7 @@ export function createBotsRouter(db: AppDb, botEngine: BotEngine): IRouter {
         name,
         strategy,
         enabled: enabled ?? false,
-        config: JSON.stringify({ ...DEFAULT_BOT_CONFIG, ...config }),
+        config: JSON.stringify(mergedConfig),
         pollIntervalSeconds: pollIntervalSeconds ?? 60,
         createdAt: now,
         updatedAt: now,
@@ -78,8 +104,21 @@ export function createBotsRouter(db: AppDb, botEngine: BotEngine): IRouter {
       .orderBy(desc(paperTradesTable.closedAt))
       .limit(50)
       .all();
+    const openLivePositions = db
+      .select()
+      .from(livePositionsTable)
+      .where(eq(livePositionsTable.botId, bot.id))
+      .all()
+      .filter((p) => p.status === "open");
+    const recentLiveTrades = db
+      .select()
+      .from(liveTradesTable)
+      .where(eq(liveTradesTable.botId, bot.id))
+      .orderBy(desc(liveTradesTable.closedAt))
+      .limit(50)
+      .all();
 
-    res.json({ ...bot, openPositions, recentTrades });
+    res.json({ ...bot, openPositions, recentTrades, openLivePositions, recentLiveTrades });
   });
 
   router.patch("/bots/:id", (req, res) => {
@@ -93,10 +132,18 @@ export function createBotsRouter(db: AppDb, botEngine: BotEngine): IRouter {
       res.status(400).json({ error: parsed.error.flatten() });
       return;
     }
-    const { name, config, pollIntervalSeconds, enabled } = parsed.data;
-    const mergedConfig = config
-      ? { ...JSON.parse(existing.config), ...config }
+    const { name, config: partialConfig, pollIntervalSeconds, enabled } = parsed.data;
+    const mergedConfig: BotConfig | undefined = partialConfig
+      ? { ...(JSON.parse(existing.config) as BotConfig), ...partialConfig }
       : undefined;
+
+    if (mergedConfig) {
+      const liveError = validateLiveTradingConfig(mergedConfig);
+      if (liveError) {
+        res.status(400).json({ error: liveError });
+        return;
+      }
+    }
 
     db.update(botsTable)
       .set({
@@ -119,8 +166,16 @@ export function createBotsRouter(db: AppDb, botEngine: BotEngine): IRouter {
       .where(eq(paperPositionsTable.botId, req.params.id))
       .all()
       .filter((p) => p.status === "open").length;
-    if (openCount > 0) {
-      res.status(409).json({ error: `Bot has ${openCount} open position(s) — close them before deleting` });
+    const openLiveCount = db
+      .select()
+      .from(livePositionsTable)
+      .where(eq(livePositionsTable.botId, req.params.id))
+      .all()
+      .filter((p) => p.status === "open").length;
+    if (openCount > 0 || openLiveCount > 0) {
+      res.status(409).json({
+        error: `Bot has ${openCount} open paper position(s) and ${openLiveCount} open LIVE position(s) — close them before deleting`,
+      });
       return;
     }
     db.delete(botsTable).where(eq(botsTable.id, req.params.id)).run();

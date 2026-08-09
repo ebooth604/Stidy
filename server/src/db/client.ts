@@ -81,6 +81,44 @@ CREATE TABLE IF NOT EXISTS paper_trades (
 CREATE INDEX IF NOT EXISTS idx_trades_bot ON paper_trades (bot_id);
 CREATE INDEX IF NOT EXISTS idx_trades_closed_at ON paper_trades (closed_at);
 
+CREATE TABLE IF NOT EXISTS live_positions (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL,
+  coin TEXT NOT NULL,
+  side TEXT NOT NULL,
+  quantity REAL NOT NULL,
+  entry_price REAL NOT NULL,
+  stop_loss REAL NOT NULL,
+  take_profit REAL NOT NULL,
+  signal_id TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  pnl REAL,
+  pnl_pct REAL,
+  closed_price REAL,
+  opened_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  closed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_live_positions_bot_status ON live_positions (bot_id, status);
+CREATE INDEX IF NOT EXISTS idx_live_positions_status_coin ON live_positions (status, coin);
+
+CREATE TABLE IF NOT EXISTS live_trades (
+  id TEXT PRIMARY KEY,
+  bot_id TEXT NOT NULL,
+  position_id TEXT NOT NULL,
+  coin TEXT NOT NULL,
+  side TEXT NOT NULL,
+  quantity REAL NOT NULL,
+  entry_price REAL NOT NULL,
+  exit_price REAL NOT NULL,
+  close_reason TEXT NOT NULL,
+  pnl REAL NOT NULL,
+  pnl_pct REAL NOT NULL,
+  opened_at INTEGER NOT NULL,
+  closed_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_live_trades_bot ON live_trades (bot_id);
+CREATE INDEX IF NOT EXISTS idx_live_trades_closed_at ON live_trades (closed_at);
+
 CREATE TABLE IF NOT EXISTS ai_reports (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL,

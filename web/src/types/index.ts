@@ -36,6 +36,8 @@ export interface BotConfig {
   positionSizeUsd: number;
   maxPositions: number;
   maxDrawdownPct: number;
+  /** Real-money trading for this bot. Inert unless the server has live trading configured. */
+  liveTrading: boolean;
 }
 
 export interface BotSummary {
@@ -52,6 +54,9 @@ export interface BotSummary {
   totalTrades: number;
   totalPnl: number;
   winRate: number | null;
+  openLivePositions: number;
+  totalLiveTrades: number;
+  totalLivePnl: number;
 }
 
 export interface Position {
@@ -122,19 +127,47 @@ export interface StoredDigest {
   generatedAt: number;
 }
 
+/** The AI never controls liveTrading — its output structurally can't include
+ * that field (see server/src/ai/schemas.ts), so it's omitted here too. */
+export type AiBotConfig = Omit<BotConfig, "liveTrading">;
+
 export interface TuningSuggestion {
   rationale: string;
-  suggestedConfig: BotConfig;
+  suggestedConfig: AiBotConfig;
 }
 
 export interface BotDesign {
   name: string;
   strategy: StrategyName;
   rationale: string;
-  config: BotConfig;
+  config: AiBotConfig;
 }
 
 export interface ChatTurn {
   role: "user" | "assistant";
   content: string;
+}
+
+export interface HealthResponse {
+  status: string;
+  aiConfigured: boolean;
+  cmcConfigured: boolean;
+  liveTradingConfigured: boolean;
+  time: string;
+}
+
+export interface LiveAccountPosition {
+  coin: string;
+  side: "long" | "short";
+  quantity: number;
+  entryPrice: number;
+  unrealizedPnl: number;
+  liquidationPx: number | null;
+}
+
+export interface LiveAccountState {
+  accountValue: number;
+  withdrawable: number;
+  totalMarginUsed: number;
+  positions: LiveAccountPosition[];
 }

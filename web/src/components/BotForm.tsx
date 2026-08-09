@@ -19,6 +19,7 @@ const DEFAULT_VALUES: BotFormValues = {
     positionSizeUsd: 500,
     maxPositions: 5,
     maxDrawdownPct: 20,
+    liveTrading: false,
   },
   pollIntervalSeconds: 60,
   enabled: false,
@@ -29,11 +30,15 @@ export function BotForm({
   submitLabel,
   onSubmit,
   submitting,
+  liveTradingConfigured,
 }: {
   initial?: Partial<BotFormValues>;
   submitLabel: string;
   onSubmit: (values: BotFormValues) => void;
   submitting?: boolean;
+  /** Whether the SERVER has live trading configured at all (health.liveTradingConfigured).
+   * When false, the live-trading toggle is shown but disabled with an explanation. */
+  liveTradingConfigured: boolean;
 }) {
   const [values, setValues] = useState<BotFormValues>({
     ...DEFAULT_VALUES,
@@ -43,6 +48,17 @@ export function BotForm({
 
   function setConfig<K extends keyof BotConfig>(key: K, value: BotConfig[K]) {
     setValues((v) => ({ ...v, config: { ...v.config, [key]: value } }));
+  }
+
+  function handleLiveTradingToggle(checked: boolean) {
+    if (checked) {
+      const confirmed = confirm(
+        "This bot will place REAL orders on Hyperliquid with real funds when enabled. " +
+          "Are you sure you want to turn on live trading for this bot?",
+      );
+      if (!confirmed) return;
+    }
+    setConfig("liveTrading", checked);
   }
 
   return (
@@ -104,6 +120,23 @@ export function BotForm({
           />
           Enabled
         </label>
+      </div>
+
+      <div className={`rounded-lg border p-3 ${values.config.liveTrading ? "border-short/50 bg-short/10" : "border-border bg-panel"}`}>
+        <label className={`flex items-center gap-2 text-sm font-medium ${liveTradingConfigured ? "text-slate-200" : "text-slate-500"}`}>
+          <input
+            type="checkbox"
+            disabled={!liveTradingConfigured}
+            checked={values.config.liveTrading}
+            onChange={(e) => handleLiveTradingToggle(e.target.checked)}
+          />
+          Live trading — place REAL orders with real funds
+        </label>
+        <p className="mt-1 text-xs text-slate-500">
+          {liveTradingConfigured
+            ? "This bot will trade its own separate live position size (capped by HYPERLIQUID_LIVE_MAX_ORDER_USD on the server), tracked apart from paper trading."
+            : "Not available: the server doesn't have live trading configured (HYPERLIQUID_LIVE_TRADING_ENABLED / API wallet key / account address)."}
+        </p>
       </div>
 
       <button

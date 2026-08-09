@@ -18,6 +18,10 @@ export interface BotConfig {
   maxPositions: number;
   /** Pause new entries (stops still fire) once drawdown from peak balance exceeds this. 0 disables the gate. */
   maxDrawdownPct: number;
+  /** Real-money trading for THIS bot. Only takes effect if the server has live
+   * trading configured at all (HYPERLIQUID_LIVE_TRADING_ENABLED + credentials) —
+   * otherwise this flag is inert. Always false by default. */
+  liveTrading: boolean;
 }
 
 export const DEFAULT_BOT_CONFIG: BotConfig = {
@@ -27,6 +31,7 @@ export const DEFAULT_BOT_CONFIG: BotConfig = {
   positionSizeUsd: 500,
   maxPositions: 5,
   maxDrawdownPct: 20,
+  liveTrading: false,
 };
 
 export interface TradeIntent {
@@ -51,4 +56,7 @@ export interface BotSummary {
   totalTrades: number;
   totalPnl: number;
   winRate: number | null;
+  openLivePositions: number;
+  totalLiveTrades: number;
+  totalLivePnl: number;
 }

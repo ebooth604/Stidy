@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { isAiConfigured } from "../ai/client.js";
 import { isCmcConfigured } from "../external/coinmarketcap.js";
+import { isLiveTradingConfigured } from "../hyperliquid/liveExchange.js";
 
 export function createHealthRouter(): IRouter {
   const router = Router();
@@ -10,6 +11,7 @@ export function createHealthRouter(): IRouter {
       status: "ok",
       aiConfigured: isAiConfigured(),
       cmcConfigured: isCmcConfigured(),
+      liveTradingConfigured: isLiveTradingConfigured(),
       time: new Date().toISOString(),
     });
   });

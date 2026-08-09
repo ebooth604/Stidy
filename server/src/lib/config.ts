@@ -7,6 +7,12 @@ function num(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function bool(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  return raw.toLowerCase() === "true" || raw === "1";
+}
+
 export const config = {
   hyperliquid: {
     apiUrl: process.env.HYPERLIQUID_API_URL ?? "https://api.hyperliquid.xyz",
@@ -43,5 +49,24 @@ export const config = {
   },
   bots: {
     tickMs: num("BOT_TICK_MS", 15_000),
+  },
+  // Real-money trading. Every field here is OFF/empty by default — a bot never
+  // places a live order unless `enabled` is explicitly true AND both the key
+  // and account address are set. See server/.env.example for the full warning.
+  liveTrading: {
+    enabled: bool("HYPERLIQUID_LIVE_TRADING_ENABLED", false),
+    // Private key for a Hyperliquid "API wallet" (agent) — NOT your main wallet's
+    // key. Never logged; only ever passed to the signing library in-process.
+    apiWalletPrivateKey: process.env.HYPERLIQUID_API_WALLET_PRIVATE_KEY ?? "",
+    // The MASTER account address the API wallet is approved to trade on behalf
+    // of (public info, not a secret) — funds and positions live here, not at
+    // the API wallet's own address.
+    accountAddress: process.env.HYPERLIQUID_ACCOUNT_ADDRESS ?? "",
+    // Hard ceiling on any single live order's notional USD, enforced in code
+    // independent of what a bot's own positionSizeUsd config says.
+    maxOrderUsd: num("HYPERLIQUID_LIVE_MAX_ORDER_USD", 100),
+    // Aggressive-IOC slippage tolerance in basis points used to emulate a
+    // "market" order (Hyperliquid has no native market order type).
+    slippageBps: num("HYPERLIQUID_LIVE_SLIPPAGE_BPS", 50),
   },
 } as const;
